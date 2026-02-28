@@ -9,14 +9,15 @@ import DailyFeature from '@/models/DailyFeature';
 
 export async function POST(req: NextRequest) {
   await dbConnect();
-  const auth = requireAuth(req); if ('error' in auth) return auth.error;
+  const auth = await requireAuth(req); if ('error' in auth) return auth.error;
   const forbidden = requireRole(auth.claims!, ['patient','clinician','admin']); if (forbidden) return forbidden; // any role can share own data
   const { uid } = auth.claims!;
   const token = crypto.randomBytes(24).toString('hex');
   const ttlDays = Number(process.env.SHARE_TOKEN_TTL_DAYS || 14);
   const expiresAt = new Date(Date.now() + ttlDays*86400000);
   const share = await ClinicianShare.create({ userId: uid, token, expiresAt });
-  const url = `${process.env.APP_URL}/api/clinician/report?token=${token}`;
+  const baseUrl = process.env.APP_URL || (req.headers.get('origin') || 'http://localhost:3000');
+  const url = `${baseUrl}/clinician/report?token=${token}`;
   return NextResponse.json({ url, expiresAt });
 }
 

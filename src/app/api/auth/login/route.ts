@@ -13,6 +13,9 @@ export async function POST(req: NextRequest) {
   const ok = await comparePassword(data.password, user.passwordHash);
   if (!ok) return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
   const token = signJwt({ uid: String(user._id), role: user.role });
-  setAuthCookie(token);
-  return NextResponse.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+  await setAuthCookie(token);
+  return NextResponse.json({
+    token,
+    user: { id: user._id, name: user.name, email: user.email, role: user.role }
+  });
 }

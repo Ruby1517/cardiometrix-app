@@ -1,24 +1,64 @@
 @import "tailwindcss";
 
-:root {
-  --cmx-bg: #ffffff;
-  --cmx-text: #0f172a;
-  --cmx-line: #e5e7eb;
-  --cmx-primary: #0d9488;
-  --cmx-primaryHover: #0f766e;
-  --cmx-accent: #059669;
-  --cmx-info: #4f46e5;
-  --cmx-risk-green: #16a34a;
-  --cmx-risk-amber: #f59e0b;
-  --cmx-risk-red: #dc2626;
+@theme {
+  --color-cmx-bg: #f4fafb;
+  --color-cmx-text: #143c3a;
+  --color-cmx-line: #e1f0ef;
+  --color-cmx-primary: #32d0c6;
+  --color-cmx-primary-hover: #1aaeaa;
+  --color-cmx-accent: #2dbe7e;
+  --color-cmx-info: #1aaeaa;
+  --color-cmx-risk-green: #2dbe7e;
+  --color-cmx-risk-amber: #f5a15b;
+  --color-cmx-risk-red: #e05858;
+  
+  --radius-card: 1.375rem;
+  --shadow-soft: 0 10px 30px rgba(14, 68, 66, 0.08);
 }
 
-html, body { background: var(--cmx-bg); color: var(--cmx-text); }
+:root {
+  --cmx-bg: var(--color-cmx-bg);
+  --cmx-text: var(--color-cmx-text);
+  --cmx-line: var(--color-cmx-line);
+  --cmx-primary: var(--color-cmx-primary);
+  --cmx-primaryHover: var(--color-cmx-primary-hover);
+  --cmx-accent: var(--color-cmx-accent);
+  --cmx-info: var(--color-cmx-info);
+  --cmx-risk-green: var(--color-cmx-risk-green);
+  --cmx-risk-amber: var(--color-cmx-risk-amber);
+  --cmx-risk-red: var(--color-cmx-risk-red);
+}
 
-/* Recreate our utilities/components in a layer */
+html, body { 
+  background: linear-gradient(180deg, #f4fafb 0%, #ecf8f7 100%); 
+  color: var(--cmx-text); 
+}
+
+/* Components */
 @layer components {
-  .cmx-card { @apply bg-white border border-cmx-line rounded-card shadow-soft; }
-  .cmx-btn  { @apply text-white bg-cmx-primary hover:bg-cmx-primaryHover border border-cmx-primary rounded-md px-3 py-2; }
-  .cmx-link { @apply underline text-cmx-info; }
-  .cmx-badge{ @apply text-white px-2 py-0.5 rounded; }
+  .cmx-card { 
+    background: #ffffff;
+    border: 1px solid var(--color-cmx-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-soft);
+  }
+  .cmx-btn { 
+    color: white;
+    background-color: var(--color-cmx-primary);
+    border: 1px solid var(--color-cmx-primary);
+    border-radius: 999px;
+    padding: 0.55rem 0.9rem;
+  }
+  .cmx-btn:hover {
+    background-color: var(--color-cmx-primary-hover);
+  }
+  .cmx-link { 
+    text-decoration: underline;
+    color: var(--color-cmx-info);
+  }
+  .cmx-badge { 
+    color: white;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+  }
 }

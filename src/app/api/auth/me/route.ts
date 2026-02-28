@@ -5,7 +5,7 @@ import { getTokenFromRequest, verifyJwt } from '@/lib/auth';
 
 export async function GET(_req: NextRequest) {
   await dbConnect();
-  const token = getTokenFromRequest();
+  const token = await getTokenFromRequest();
   if (!token) return NextResponse.json({ user: null });
   try {
     const claims = verifyJwt(token);

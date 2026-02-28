@@ -2,7 +2,7 @@ import { Schema, model, models, Types } from 'mongoose';
 
 const MeasurementSchema = new Schema({
   userId: { type: Types.ObjectId, ref: 'User', index: true },
-  type: { type: String, enum: ['bp','weight','steps','sleep','hrv'], index: true },
+  type: { type: String, enum: ['bp','weight','steps','sleep','hrv','a1c','lipid'], index: true },
   measuredAt: { type: Date, index: true },
   source: { type: String, default: 'manual' },
   payload: { type: Schema.Types.Mixed, required: true }

@@ -115,12 +115,13 @@
 'use client';
 import { useEffect, useState } from 'react';
 import TodayCard from '@/components/TodayCard';
-import { MeasurementForm } from '@/components/MeasurementForm';
 
 export default function Page(){
   const [user, setUser] = useState<any>(null);
   const [risk, setRisk] = useState<any>(null);
   const [nudge, setNudge] = useState<any>(null);
+  const [shareUrl, setShareUrl] = useState('');
+  const [shareExpiry, setShareExpiry] = useState('');
 
   async function refresh(){
     const me = await fetch('/api/auth/me', { cache:'no-store', credentials:'include' }).then(r=>r.json());
@@ -142,14 +143,51 @@ export default function Page(){
         <section className="cmx-card p-4"><p className="opacity-80">Welcome! Sign in from the navbar to view your risk and daily nudge.</p></section>
       ) : (
         <>
-          <TodayCard risk={risk} nudge={nudge} />
-          <MeasurementForm onSaved={refresh} />
+          <TodayCard risk={risk} nudge={nudge} onRefresh={refresh} />
+          <section className="cmx-card p-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="font-medium">Vitals</h2>
+              <p className="text-sm opacity-70 mt-1">Manage measurements, goals, labs, and reminders.</p>
+            </div>
+            <a className="cmx-btn" href="/vitals">Open Vitals</a>
+          </section>
           <section className="cmx-card p-4">
             <h2 className="font-medium mb-2">Share with clinician</h2>
-            <button className="cmx-btn" onClick={async()=>{
-              const r = await fetch('/api/clinician/share',{method:'POST'}).then(r=>r.json());
-              if (r.url) alert('Share link: '+r.url);
-            }}>Create link</button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                className="cmx-btn"
+                onClick={async () => {
+                  const r = await fetch('/api/clinician/share', { method: 'POST' }).then((res) => res.json());
+                  if (r.url) {
+                    setShareUrl(r.url);
+                    setShareExpiry(new Date(r.expiresAt).toLocaleDateString());
+                    await navigator.clipboard.writeText(r.url);
+                    alert('Share link copied to clipboard!');
+                  }
+                }}
+              >
+                Create Share Link
+              </button>
+              {shareUrl ? (
+                <>
+                  <a className="cmx-btn" href={shareUrl} target="_blank" rel="noreferrer">
+                    Open Report
+                  </a>
+                  <button
+                    className="cmx-btn"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(shareUrl);
+                      alert('Share link copied to clipboard!');
+                    }}
+                  >
+                    Copy Link
+                  </button>
+                </>
+              ) : null}
+            </div>
+            {shareUrl ? (
+              <p className="text-xs opacity-70 mt-2">Link expires on {shareExpiry}.</p>
+            ) : null}
           </section>
         </>
       )}

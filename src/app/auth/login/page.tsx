@@ -24,6 +24,12 @@ export default function LoginPage(){
         {err && <p className="text-red-600 text-sm">{err}</p>}
         <button disabled={loading} className="border px-3 py-1 rounded w-full">{loading?'Logging in...':'Log in'}</button>
       </form>
+      <a
+        className="border px-3 py-2 rounded w-full block text-center"
+        href="/api/auth/google/start?next=/"
+      >
+        Continue with Google
+      </a>
       <p className="text-sm">New here? <a className="underline" href="/auth/register">Create an account</a></p>
     </main>
   );

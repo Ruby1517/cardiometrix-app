@@ -14,6 +14,9 @@ export async function POST(req: NextRequest) {
   const passwordHash = await hashPassword(data.password);
   const user = await User.create({ name: data.name, email: data.email, passwordHash, role: data.role });
   const token = signJwt({ uid: String(user._id), role: user.role });
-  setAuthCookie(token);
-  return NextResponse.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+  await setAuthCookie(token);
+  return NextResponse.json({
+    token,
+    user: { id: user._id, name: user.name, email: user.email, role: user.role },
+  });
 }
