@@ -4,42 +4,24 @@ export type RootStackParamList = {
 };
 
 export type RootTabParamList = {
-  Vitals: undefined;
-  Symptoms: undefined;
-  Meds: undefined;
-  Insights: undefined;
-  Timeline: undefined;
-  Profile: undefined;
+  Home: undefined;
+  AddData: undefined;
+  Settings: undefined;
 };
 
-export type VitalsStackParamList = {
+export type AddDataStackParamList = {
   VitalsList: undefined;
   AddVitals: undefined;
   AddLabs: undefined;
   Goals: undefined;
+  DataImport: undefined;
 };
 
-export type SymptomsStackParamList = {
-  SymptomsHistory: undefined;
-  SymptomCheckin: undefined;
-};
-
-export type MedsStackParamList = {
-  MedsList: undefined;
-  MedForm: { medicationId?: string } | undefined;
-};
-
-export type InsightsStackParamList = {
+export type HomeStackParamList = {
   HealthOverview: undefined;
-  InsightsDetail: undefined;
-  SummaryDetails: { period?: 'week' | 'month' } | undefined;
 };
 
-export type TimelineStackParamList = {
-  TimelineHome: undefined;
-};
-
-export type ProfileStackParamList = {
+export type SettingsStackParamList = {
   ProfileHome: undefined;
   Login: undefined;
   Reminders: undefined;
@@ -49,4 +31,24 @@ export type ProfileStackParamList = {
 
 export type AuthStackParamList = {
   Login: { mode?: 'login' | 'register' } | undefined;
+};
+
+// Backward-compatible aliases for screens kept in repo but hidden from MVP nav.
+export type VitalsStackParamList = AddDataStackParamList;
+export type ProfileStackParamList = SettingsStackParamList;
+export type InsightsStackParamList = {
+  HealthOverview: undefined;
+  InsightsDetail: undefined;
+  SummaryDetails: { period?: 'week' | 'month' } | undefined;
+};
+export type SymptomsStackParamList = {
+  SymptomsHistory: undefined;
+  SymptomCheckin: undefined;
+};
+export type MedsStackParamList = {
+  MedsList: undefined;
+  MedForm: { medicationId?: string } | undefined;
+};
+export type TimelineStackParamList = {
+  TimelineHome: undefined;
 };

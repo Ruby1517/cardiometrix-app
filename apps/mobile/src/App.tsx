@@ -1,33 +1,23 @@
 import 'react-native-gesture-handler';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useEffect, useRef, useState } from 'react';
-import { AppState, TouchableOpacity, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   RootStackParamList,
   RootTabParamList,
-  VitalsStackParamList,
-  SymptomsStackParamList,
-  MedsStackParamList,
-  InsightsStackParamList,
-  TimelineStackParamList,
-  ProfileStackParamList,
+  AddDataStackParamList,
+  HomeStackParamList,
+  SettingsStackParamList,
   AuthStackParamList,
 } from './utils/navigation';
 import { VitalsListScreen } from './screens/VitalsListScreen';
 import { AddVitalsScreen } from './screens/AddVitalsScreen';
 import { AddLabsScreen } from './screens/AddLabsScreen';
 import { GoalsScreen } from './screens/GoalsScreen';
-import { SymptomsHistoryScreen } from './screens/SymptomsHistoryScreen';
-import { SymptomCheckinScreen } from './screens/SymptomCheckinScreen';
-import { MedListScreen } from './screens/MedListScreen';
-import { MedFormScreen } from './screens/MedFormScreen';
-import { InsightsScreen } from './screens/InsightsScreen';
 import { HealthOverviewScreen } from './screens/HealthOverviewScreen';
-import { SummaryDetailsScreen } from './screens/SummaryDetailsScreen';
-import { TimelineScreen } from './screens/TimelineScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { RemindersScreen } from './screens/RemindersScreen';
@@ -42,229 +32,54 @@ import { runDailyHealthSyncIfNeeded } from './utils/health/autoDailySync';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<RootTabParamList>();
-const VitalsStack = createNativeStackNavigator<VitalsStackParamList>();
-const SymptomsStack = createNativeStackNavigator<SymptomsStackParamList>();
-const MedsStack = createNativeStackNavigator<MedsStackParamList>();
-const InsightsStack = createNativeStackNavigator<InsightsStackParamList>();
-const TimelineStack = createNativeStackNavigator<TimelineStackParamList>();
-const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
+const AddDataStack = createNativeStackNavigator<AddDataStackParamList>();
+const HomeStack = createNativeStackNavigator<HomeStackParamList>();
+const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 
-function HeaderButton({ label, onPress }: { label: string; onPress: () => void }) {
+const defaultHeaderOptions = {
+  title: 'CardioMetrix',
+  headerStyle: { backgroundColor: theme.colors.primary },
+  headerTitleStyle: { color: '#ffffff', fontWeight: '700' as const },
+  headerTintColor: '#ffffff',
+};
+
+function AddDataStackScreen() {
   return (
-    <TouchableOpacity onPress={onPress} accessibilityRole="button">
-      <Text style={{ color: theme.colors.primaryDark, fontWeight: '600' }}>{label}</Text>
-    </TouchableOpacity>
+    <AddDataStack.Navigator screenOptions={defaultHeaderOptions}>
+      <AddDataStack.Screen name="VitalsList" component={VitalsListScreen} options={{ title: 'Add Data' }} />
+      <AddDataStack.Screen name="AddVitals" component={AddVitalsScreen} options={{ title: 'Add Vitals' }} />
+      <AddDataStack.Screen name="AddLabs" component={AddLabsScreen} options={{ title: 'Add Labs' }} />
+      <AddDataStack.Screen name="Goals" component={GoalsScreen} options={{ title: 'Goals' }} />
+      <AddDataStack.Screen name="DataImport" component={DataImportScreen} options={{ title: 'Device Import' }} />
+    </AddDataStack.Navigator>
   );
 }
 
-function HeaderRight({
-  showSettings,
-  onSettings,
-}: {
-  showSettings: boolean;
-  onSettings: () => void;
-}) {
-  const user = useAuthStore((state) => state.user);
-  const navigation = useNavigation();
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  if (!user) {
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View style={{ marginRight: 12 }}>
-          <HeaderButton
-            label="Login"
-            onPress={() => {
-              navigation.navigate('Auth' as never, { screen: 'Login', params: { mode: 'login' } } as never);
-            }}
-          />
-        </View>
-        <HeaderButton
-          label="Sign up"
-          onPress={() => {
-            navigation.navigate('Auth' as never, { screen: 'Login', params: { mode: 'register' } } as never);
-          }}
-        />
-      </View>
-    );
-  }
-
-  if (!showSettings) return null;
-
+function HomeStackScreen() {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <View style={{ position: 'relative' }}>
-        <TouchableOpacity
-          onPress={() => setMenuOpen((open) => !open)}
-          style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12 }}
-        >
-          <View
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 14,
-              backgroundColor: theme.colors.primarySoft,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginRight: 8,
-            }}
-          >
-            <Text style={{ color: theme.colors.primaryDark, fontWeight: '700' }}>
-              {user.name?.[0]?.toUpperCase() || 'U'}
-            </Text>
-          </View>
-          <Text style={{ color: '#ffffff', fontWeight: '600' }}>
-            {user.name?.split(' ')[0] || 'Account'}
-          </Text>
-        </TouchableOpacity>
-        {menuOpen ? (
-          <View
-            style={{
-              position: 'absolute',
-              top: 36,
-              right: 0,
-              backgroundColor: theme.colors.surface,
-              borderRadius: theme.radius.input,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-              paddingVertical: 6,
-              minWidth: 140,
-              zIndex: 10,
-              ...theme.shadow.card,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => {
-                setMenuOpen(false);
-                onSettings();
-              }}
-              style={{ paddingHorizontal: 12, paddingVertical: 8 }}
-            >
-              <Text style={{ color: theme.colors.text }}>Profile & Settings</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </View>
-    </View>
+    <HomeStack.Navigator screenOptions={defaultHeaderOptions}>
+      <HomeStack.Screen name="HealthOverview" component={HealthOverviewScreen} options={{ title: 'Home' }} />
+    </HomeStack.Navigator>
   );
 }
 
-function buildHeaderOptions({
-  showSettings,
-  onSettings,
-}: {
-  showSettings: boolean;
-  onSettings: () => void;
-}) {
-  return {
-    title: 'CardioMetrix',
-    headerStyle: { backgroundColor: theme.colors.primary, shadowOpacity: 0 },
-    headerTitleStyle: { color: '#ffffff', fontWeight: '700' },
-    headerTintColor: '#ffffff',
-    headerRight: () => <HeaderRight showSettings={showSettings} onSettings={onSettings} />,
-  };
-}
-
-function VitalsStackScreen() {
+function SettingsStackScreen() {
   return (
-    <VitalsStack.Navigator
-      screenOptions={({ navigation }) =>
-        buildHeaderOptions({
-          showSettings: true,
-          onSettings: () => navigation.navigate('Profile'),
-        })
-      }
-    >
-      <VitalsStack.Screen name="VitalsList" component={VitalsListScreen} />
-      <VitalsStack.Screen name="AddVitals" component={AddVitalsScreen} />
-      <VitalsStack.Screen name="AddLabs" component={AddLabsScreen} />
-      <VitalsStack.Screen name="Goals" component={GoalsScreen} />
-    </VitalsStack.Navigator>
-  );
-}
-
-function SymptomsStackScreen() {
-  return (
-    <SymptomsStack.Navigator
-      screenOptions={({ navigation }) =>
-        buildHeaderOptions({
-          showSettings: true,
-          onSettings: () => navigation.navigate('Profile'),
-        })
-      }
-    >
-      <SymptomsStack.Screen name="SymptomsHistory" component={SymptomsHistoryScreen} />
-      <SymptomsStack.Screen name="SymptomCheckin" component={SymptomCheckinScreen} />
-    </SymptomsStack.Navigator>
-  );
-}
-
-function MedsStackScreen() {
-  return (
-    <MedsStack.Navigator
-      screenOptions={({ navigation }) =>
-        buildHeaderOptions({
-          showSettings: true,
-          onSettings: () => navigation.navigate('Profile'),
-        })
-      }
-    >
-      <MedsStack.Screen name="MedsList" component={MedListScreen} />
-      <MedsStack.Screen name="MedForm" component={MedFormScreen} />
-    </MedsStack.Navigator>
-  );
-}
-
-function InsightsStackScreen() {
-  return (
-    <InsightsStack.Navigator
-      screenOptions={({ navigation }) =>
-        buildHeaderOptions({ showSettings: true, onSettings: () => navigation.navigate('Profile') })
-      }
-    >
-      <InsightsStack.Screen name="HealthOverview" component={HealthOverviewScreen} />
-      <InsightsStack.Screen name="InsightsDetail" component={InsightsScreen} />
-      <InsightsStack.Screen name="SummaryDetails" component={SummaryDetailsScreen} />
-    </InsightsStack.Navigator>
-  );
-}
-
-function TimelineStackScreen() {
-  return (
-    <TimelineStack.Navigator
-      screenOptions={({ navigation }) =>
-        buildHeaderOptions({ showSettings: true, onSettings: () => navigation.navigate('Profile') })
-      }
-    >
-      <TimelineStack.Screen name="TimelineHome" component={TimelineScreen} />
-    </TimelineStack.Navigator>
-  );
-}
-
-function ProfileStackScreen() {
-  return (
-    <ProfileStack.Navigator screenOptions={() => buildHeaderOptions({ showSettings: false, onSettings: () => undefined })}>
-      <ProfileStack.Screen name="ProfileHome" component={ProfileScreen} />
-      <ProfileStack.Screen name="Login" component={LoginScreen} />
-      <ProfileStack.Screen name="Reminders" component={RemindersScreen} />
-      <ProfileStack.Screen name="DataImport" component={DataImportScreen} />
-      <ProfileStack.Screen name="CareTeam" component={CareTeamScreen} />
-    </ProfileStack.Navigator>
+    <SettingsStack.Navigator screenOptions={defaultHeaderOptions}>
+      <SettingsStack.Screen name="ProfileHome" component={ProfileScreen} options={{ title: 'Settings' }} />
+      <SettingsStack.Screen name="Reminders" component={RemindersScreen} options={{ title: 'Notifications' }} />
+      <SettingsStack.Screen name="DataImport" component={DataImportScreen} options={{ title: 'Device Import' }} />
+      <SettingsStack.Screen name="CareTeam" component={CareTeamScreen} options={{ title: 'Care Team' }} />
+      <SettingsStack.Screen name="Login" component={LoginScreen} options={{ title: 'Login' }} />
+    </SettingsStack.Navigator>
   );
 }
 
 function AuthStackScreen() {
   return (
-    <AuthStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: theme.colors.primary, shadowOpacity: 0 },
-        headerTitleStyle: { color: '#ffffff', fontWeight: '700' },
-        headerTintColor: '#ffffff',
-        title: 'CardioMetrix',
-      }}
-    >
-      <AuthStack.Screen name="Login" component={LoginScreen} />
+    <AuthStack.Navigator screenOptions={defaultHeaderOptions}>
+      <AuthStack.Screen name="Login" component={LoginScreen} options={{ title: 'CardioMetrix' }} />
     </AuthStack.Navigator>
   );
 }
@@ -272,12 +87,9 @@ function AuthStackScreen() {
 function TabNavigator() {
   return (
     <Tabs.Navigator screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="Vitals" component={VitalsStackScreen} />
-      <Tabs.Screen name="Symptoms" component={SymptomsStackScreen} />
-      <Tabs.Screen name="Meds" component={MedsStackScreen} />
-      <Tabs.Screen name="Insights" component={InsightsStackScreen} />
-      <Tabs.Screen name="Timeline" component={TimelineStackScreen} />
-      <Tabs.Screen name="Profile" component={ProfileStackScreen} />
+      <Tabs.Screen name="Home" component={HomeStackScreen} options={{ title: 'Home' }} />
+      <Tabs.Screen name="AddData" component={AddDataStackScreen} options={{ title: 'Add Data' }} />
+      <Tabs.Screen name="Settings" component={SettingsStackScreen} options={{ title: 'Settings' }} />
     </Tabs.Navigator>
   );
 }
@@ -331,12 +143,8 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer>
-        <Stack.Navigator>
-          {user ? (
-            <Stack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
-          ) : (
-            <Stack.Screen name="Auth" component={AuthStackScreen} options={{ headerShown: false }} />
-          )}
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {user ? <Stack.Screen name="Tabs" component={TabNavigator} /> : <Stack.Screen name="Auth" component={AuthStackScreen} />}
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

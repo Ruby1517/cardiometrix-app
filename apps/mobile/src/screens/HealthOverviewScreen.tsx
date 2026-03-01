@@ -1,65 +1,35 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { LayoutChangeEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Svg, { Polyline } from 'react-native-svg';
+import { Alert, Button, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Screen } from '../components/Screen';
 import { SectionCard } from '../components/SectionCard';
-import { fetchTodayNudge } from '../api/nudges';
-import { fetchTodayRisk } from '../api/risk';
-import { SummaryResponse, SymptomEntry, TrendMeasurement, WeeklyRiskSummary } from '../api/types';
+import { fetchTodayNudge, markTodayNudgeDone } from '../api/nudges';
+import { fetchTodayRisk, getWeeklyRiskSummary } from '../api/risk';
+import { RiskToday, WeeklyRiskSummary } from '../api/types';
+import { createShareLink } from '../api/clinician';
 import { theme } from '../theme';
-import { classifyMomentum, computeSlope } from '../utils/momentum';
-import { DataCoverageResponse } from '../api/coverage';
 
 type RiskLevel = 'Low' | 'Moderate' | 'Needs Attention' | 'Unknown';
 
 export function HealthOverviewScreen() {
   const navigation = useNavigation();
-  const [bpData, setBpData] = useState<TrendMeasurement[]>([]);
-  const [weightData, setWeightData] = useState<TrendMeasurement[]>([]);
-  const [nudge, setNudge] = useState<string>('');
-  const [riskLevel, setRiskLevel] = useState<RiskLevel>('Unknown');
-  const [riskSummary, setRiskSummary] = useState('Add more readings to update your overview.');
-  const [riskDrivers, setRiskDrivers] = useState<Array<{ name: string; contribution: number }>>([]);
-  const [riskChanges, setRiskChanges] = useState<string[]>([]);
+  const [risk, setRisk] = useState<RiskToday | null>(null);
+  const [nudge, setNudge] = useState<{ message: string; status?: string } | null>(null);
+  const [weekly, setWeekly] = useState<WeeklyRiskSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [chartWidth, setChartWidth] = useState(0);
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [symptoms, setSymptoms] = useState<SymptomEntry[]>([]);
-  const [coverage, setCoverage] = useState<DataCoverageResponse | null>(null);
+  const [doneLoading, setDoneLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [todayRisk, todayNudge] = await Promise.all([
+      const [todayRisk, todayNudge, weeklySummary] = await Promise.all([
         fetchTodayRisk().catch(() => null),
         fetchTodayNudge().catch(() => null),
+        getWeeklyRiskSummary().catch(() => null),
       ]);
-
-      const level = todayRisk?.band === 'green'
-        ? 'Low'
-        : todayRisk?.band === 'amber'
-          ? 'Moderate'
-          : todayRisk?.band === 'red'
-            ? 'Needs Attention'
-            : 'Unknown';
-      setRiskLevel(level);
-      setRiskSummary(buildRiskSummary(level, null));
-      setNudge(todayNudge?.message ?? 'No nudge yet.');
-      setRiskDrivers(
-        (todayRisk?.explainability?.drivers || []).slice(0, 3).map((driver) => ({
-          name: driver.name,
-          contribution: driver.contribution,
-        })),
-      );
-      setRiskChanges((todayRisk?.explainability?.changes || []).slice(0, 3));
-      setBpData([]);
-      setWeightData([]);
-      setSummary(null);
-      setSummaryError(null);
-      setSymptoms([]);
-      setCoverage(null);
+      setRisk(todayRisk);
+      setNudge(todayNudge ? { message: todayNudge.message, status: todayNudge.status } : null);
+      setWeekly(weeklySummary);
     } finally {
       setLoading(false);
     }
@@ -69,307 +39,123 @@ export function HealthOverviewScreen() {
     load();
   }, [load]);
 
-  const pulseAverage = useMemo(() => {
-    const pulses = bpData.map((point) => point.pulse).filter((v): v is number => typeof v === 'number');
-    if (!pulses.length) return null;
-    return pulses.reduce((a, b) => a + b, 0) / pulses.length;
-  }, [bpData]);
+  const riskLevel: RiskLevel =
+    risk?.band === 'green'
+      ? 'Low'
+      : risk?.band === 'amber'
+        ? 'Moderate'
+        : risk?.band === 'red'
+          ? 'Needs Attention'
+          : 'Unknown';
 
-  const bpSeries = useMemo(() => {
-    const sys = bpData
-      .map((point) => (typeof point.systolic === 'number' ? point.systolic : null))
-      .filter((value): value is number => typeof value === 'number');
-    const dia = bpData
-      .map((point) => (typeof point.diastolic === 'number' ? point.diastolic : null))
-      .filter((value): value is number => typeof value === 'number');
-    return { sys, dia };
-  }, [bpData]);
+  const topDrivers = useMemo(() => (risk?.explainability?.drivers || []).slice(0, 3), [risk]);
+  const changes = useMemo(() => (risk?.explainability?.changes || []).slice(0, 3), [risk]);
 
-  const weightSeries = useMemo(() => {
-    return weightData
-      .map((point) => (typeof point.kg === 'number' ? point.kg : null))
-      .filter((value): value is number => typeof value === 'number');
-  }, [weightData]);
+  async function onDoneNudge() {
+    setDoneLoading(true);
+    try {
+      await markTodayNudgeDone();
+      await load();
+    } finally {
+      setDoneLoading(false);
+    }
+  }
 
-  const momentum = useMemo(() => {
-    const bpValues = bpData
-      .map((point) => (typeof point.systolic === 'number' ? point.systolic : null))
-      .filter((value): value is number => typeof value === 'number');
-    const bpTimes = bpData.map((point) => new Date(point.date).getTime());
-
-    const weightValues = weightData
-      .map((point) => (typeof point.kg === 'number' ? point.kg : null))
-      .filter((value): value is number => typeof value === 'number');
-    const weightTimes = weightData.map((point) => new Date(point.date).getTime());
-
-    const symptomValues = symptoms
-      .map((entry) => entry.severity)
-      .filter((value): value is number => typeof value === 'number');
-    const symptomTimes = symptoms.map((entry) => new Date(entry.createdAt).getTime());
-
-    const bpSlope = computeSlope(bpValues, bpTimes);
-    const weightSlope = computeSlope(weightValues, weightTimes);
-    const symptomSlope = computeSlope(symptomValues, symptomTimes);
-
-    return classifyMomentum(bpSlope, weightSlope, symptomSlope);
-  }, [bpData, weightData, symptoms]);
+  async function onShareWeeklyReport() {
+    try {
+      const report = await createShareLink();
+      await Share.share({
+        message: `CardioMetrix weekly report (expires ${new Date(report.expiresAt).toLocaleDateString()}): ${report.url}`,
+        url: report.url,
+      });
+    } catch (error) {
+      Alert.alert('Unable to share', error instanceof Error ? error.message : 'Try again later.');
+    }
+  }
 
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Health Overview</Text>
-        <Text style={styles.subtitle}>A simple snapshot of your current trend.</Text>
+        <Text style={styles.title}>Home</Text>
+        <Text style={styles.subtitle}>Daily risk, why it changed, and one action for today.</Text>
 
         <SectionCard>
-          <Text style={styles.sectionTitle}>Health summary</Text>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Overall risk</Text>
-            <Text style={styles.summaryValue}>{riskLevel}</Text>
+          <Text style={styles.sectionTitle}>Today risk</Text>
+          <View style={styles.row}>
+            <Text style={styles.label}>Overall</Text>
+            <Text style={styles.value}>{riskLevel}</Text>
           </View>
-          <Text style={styles.summaryDetail}>{riskSummary}</Text>
-          <View style={styles.momentum}>
-            <Text style={styles.momentumTitle}>Trend signal: {momentum.momentum}</Text>
-            {momentum.reasons.length === 0 ? (
-              <Text style={styles.momentumDetail}>Add more readings to build your trend signal.</Text>
-            ) : (
-              momentum.reasons.map((reason) => (
-                <Text key={reason} style={styles.momentumDetail}>
-                  - {reason}
-                </Text>
-              ))
-            )}
+          <View style={styles.row}>
+            <Text style={styles.label}>Score</Text>
+            <Text style={styles.value}>{typeof risk?.risk === 'number' ? risk.risk.toFixed(2) : '—'}</Text>
           </View>
+          <Text style={styles.detail}>{riskSummaryText(riskLevel)}</Text>
         </SectionCard>
 
         <SectionCard>
-          <Text style={styles.sectionTitle}>Why this risk today</Text>
-          {riskDrivers.length === 0 && riskChanges.length === 0 ? (
-            <Text style={styles.summaryDetail}>Explainability will appear as your baseline builds.</Text>
-          ) : (
+          <Text style={styles.sectionTitle}>Explainability</Text>
+          {topDrivers.length ? (
             <>
-              {riskDrivers.length ? (
-                <>
-                  <Text style={styles.chartLabel}>Top drivers</Text>
-                  <View style={styles.driverRow}>
-                    {riskDrivers.map((driver) => (
-                      <View key={driver.name} style={styles.driverChip}>
-                        <Text style={styles.driverChipText}>
-                          {driver.name} ({driver.contribution.toFixed(2)})
-                        </Text>
-                      </View>
-                    ))}
+              <Text style={styles.smallLabel}>Drivers</Text>
+              <View style={styles.driverRow}>
+                {topDrivers.map((driver) => (
+                  <View key={`${driver.name}-${driver.contribution}`} style={styles.driverChip}>
+                    <Text style={styles.driverText}>{driver.name}</Text>
                   </View>
-                </>
-              ) : null}
-              {riskChanges.length ? (
-                <>
-                  <Text style={[styles.chartLabel, styles.changesLabel]}>What changed vs baseline</Text>
-                  {riskChanges.map((change) => (
-                    <Text key={change} style={styles.momentumDetail}>
-                      - {change}
-                    </Text>
-                  ))}
-                </>
-              ) : null}
+                ))}
+              </View>
             </>
-          )}
-        </SectionCard>
-
-        <SectionCard>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>This week</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('SummaryDetails' as never, { period: 'week' } as never)}>
-              <Text style={styles.link}>View details</Text>
-            </TouchableOpacity>
-          </View>
-          {summaryError ? (
-            <Text style={styles.summaryDetail}>Summary unavailable. Try again soon.</Text>
           ) : (
-            <Text style={styles.summaryDetail}>
-              {summary?.narrative ?? 'Add more readings to generate a weekly summary.'}
-            </Text>
+            <Text style={styles.detail}>No strong drivers available yet.</Text>
           )}
-          <View style={styles.summaryGrid}>
-            <View style={styles.summaryChip}>
-              <Text style={styles.summaryChipLabel}>BP avg</Text>
-              <Text style={styles.summaryChipValue}>
-                {summary?.bp ? `${formatValue(summary.bp.avgSys, 0)}/${formatValue(summary.bp.avgDia, 0)}` : '—'}
-              </Text>
-            </View>
-            <View style={styles.summaryChip}>
-              <Text style={styles.summaryChipLabel}>Weight delta</Text>
-              <Text style={styles.summaryChipValue}>
-                {summary?.weight.delta === null || summary?.weight.delta === undefined
-                  ? '—'
-                  : `${summary.weight.delta.toFixed(1)} kg`}
-              </Text>
-            </View>
-            <View style={styles.summaryChip}>
-              <Text style={styles.summaryChipLabel}>Pulse avg</Text>
-              <Text style={styles.summaryChipValue}>
-                {summary?.pulse.avg === null || summary?.pulse.avg === undefined
-                  ? '—'
-                  : `${summary.pulse.avg.toFixed(0)} bpm`}
-              </Text>
-            </View>
-            <View style={styles.summaryChip}>
-              <Text style={styles.summaryChipLabel}>Symptoms</Text>
-              <Text style={styles.summaryChipValue}>{summary ? summary.symptoms.count : '—'}</Text>
-            </View>
-          </View>
+
+          {changes.length ? (
+            <>
+              <Text style={[styles.smallLabel, styles.blockTop]}>What changed vs baseline</Text>
+              {changes.map((item) => (
+                <Text key={item} style={styles.detail}>- {item}</Text>
+              ))}
+            </>
+          ) : null}
         </SectionCard>
 
         <SectionCard>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Key trends</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('InsightsDetail' as never)}>
-              <Text style={styles.link}>Details</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.chartLabel}>Blood pressure (SYS & DIA)</Text>
-          <View onLayout={handleLayout(setChartWidth, chartWidth)} style={styles.chart}>
-            <MultiLineChart
-              width={chartWidth}
-              height={160}
-              series={[
-                { data: bpSeries.sys, color: theme.colors.primaryDark },
-                { data: bpSeries.dia, color: theme.colors.warning },
-              ]}
-            />
-          </View>
-
-          <Text style={styles.chartLabel}>Weight trend</Text>
-          <View onLayout={handleLayout(setChartWidth, chartWidth)} style={styles.chart}>
-            <MultiLineChart
-              width={chartWidth}
-              height={160}
-              series={[{ data: weightSeries, color: theme.colors.primary }]}
-            />
-          </View>
-
-          <View style={styles.pulseRow}>
-            <Text style={styles.pulseLabel}>Pulse average</Text>
-            <Text style={styles.pulseValue}>{pulseAverage ? `${pulseAverage.toFixed(0)} bpm` : '—'}</Text>
-          </View>
-        </SectionCard>
-
-        <SectionCard>
-          <Text style={styles.sectionTitle}>Today’s nudge</Text>
-          <Text style={styles.summaryDetail}>{nudge}</Text>
-        </SectionCard>
-
-        <SectionCard>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Data coverage</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Profile' as never, { screen: 'DataImport' } as never)}>
-              <Text style={styles.link}>Manage</Text>
-            </TouchableOpacity>
-          </View>
-          {coverage ? (
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryChip}>
-                <Text style={styles.summaryChipLabel}>Sleep days</Text>
-                <Text style={styles.summaryChipValue}>{coverage.metrics.sleepDaysWithData}/7</Text>
-              </View>
-              <View style={styles.summaryChip}>
-                <Text style={styles.summaryChipLabel}>Steps days</Text>
-                <Text style={styles.summaryChipValue}>{coverage.metrics.stepsDaysWithData}/7</Text>
-              </View>
-              <View style={styles.summaryChip}>
-                <Text style={styles.summaryChipLabel}>BP readings</Text>
-                <Text style={styles.summaryChipValue}>{coverage.metrics.bpReadingsThisWeek}</Text>
-              </View>
-              <View style={styles.summaryChip}>
-                <Text style={styles.summaryChipLabel}>Weight entries</Text>
-                <Text style={styles.summaryChipValue}>{coverage.metrics.weightReadingsThisWeek}</Text>
-              </View>
-            </View>
-          ) : (
-            <Text style={styles.summaryDetail}>Coverage unavailable.</Text>
-          )}
-        </SectionCard>
-
-        <SectionCard>
-          <Text style={styles.sectionTitle}>Quick actions</Text>
+          <Text style={styles.sectionTitle}>Today nudge</Text>
+          <Text style={styles.detail}>{nudge?.message || 'No nudge yet for today.'}</Text>
           <View style={styles.actionsRow}>
-            <QuickAction label="Add vitals" onPress={() => navigation.navigate('Vitals' as never, { screen: 'AddVitals' } as never)} />
-            <QuickAction label="Add symptoms" onPress={() => navigation.navigate('Symptoms' as never, { screen: 'SymptomCheckin' } as never)} />
-            <QuickAction label="Add meds" onPress={() => navigation.navigate('Meds' as never, { screen: 'MedForm' } as never)} />
+            <TouchableOpacity style={styles.actionButton} onPress={onDoneNudge} disabled={doneLoading}>
+              <Text style={styles.actionButtonText}>{doneLoading ? 'Updating...' : 'Mark Done'}</Text>
+            </TouchableOpacity>
           </View>
         </SectionCard>
 
-        {loading ? <Text style={styles.loadingText}>Updating overview…</Text> : null}
+        <SectionCard>
+          <Text style={styles.sectionTitle}>Weekly report</Text>
+          <Text style={styles.detail}>{weekly?.summaryText || 'Weekly report will populate as data arrives.'}</Text>
+          <View style={styles.actionsRow}>
+            <TouchableOpacity style={styles.actionButton} onPress={onShareWeeklyReport}>
+              <Text style={styles.actionButtonText}>Export / Share Report</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => (navigation as any).navigate('AddData', { screen: 'DataImport' })}
+            >
+              <Text style={styles.secondaryButtonText}>Device Import</Text>
+            </TouchableOpacity>
+          </View>
+        </SectionCard>
+
+        {loading ? <Text style={styles.loading}>Updating...</Text> : null}
       </ScrollView>
     </Screen>
   );
 }
 
-function buildRiskSummary(level: RiskLevel, weekly: WeeklyRiskSummary | null) {
-  if (level === 'Low') return 'Your overall trend looks steady. Keep logging for ongoing insight.';
-  if (level === 'Moderate') return 'Your trend shows some movement. Small routines can help keep things steady.';
-  if (level === 'Needs Attention') return 'Your trend is higher than usual. Keep tracking and review your habits.';
-  if (weekly?.summaryText) return weekly.summaryText;
-  return 'Add more readings to update your overview.';
-}
-
-function handleLayout(setter: (width: number) => void, current: number) {
-  return (event: LayoutChangeEvent) => {
-    const width = event.nativeEvent.layout.width;
-    if (width && width !== current) setter(width);
-  };
-}
-
-function MultiLineChart({
-  width,
-  height,
-  series,
-}: {
-  width: number;
-  height: number;
-  series: { data: number[]; color: string }[];
-}) {
-  if (!width || !series.some((s) => s.data.length >= 2)) {
-    return (
-      <View style={[styles.chartPlaceholder, { height }]}>
-        <Text style={styles.chartPlaceholderText}>Not enough data</Text>
-      </View>
-    );
-  }
-
-  const padding = 10;
-  const flatValues = series.flatMap((s) => s.data);
-  const min = Math.min(...flatValues);
-  const max = Math.max(...flatValues);
-  const range = max - min || 1;
-  const usableWidth = width - padding * 2;
-  const usableHeight = height - padding * 2;
-
-  return (
-    <Svg width={width} height={height}>
-      {series.map((line, index) => {
-        if (line.data.length < 2) return null;
-        const points = line.data.map((value, i) => {
-          const x = padding + (i / (line.data.length - 1)) * usableWidth;
-          const y = padding + (1 - (value - min) / range) * usableHeight;
-          return `${x},${y}`;
-        });
-        return <Polyline key={index} points={points.join(' ')} fill="none" stroke={line.color} strokeWidth={2} />;
-      })}
-    </Svg>
-  );
-}
-
-function QuickAction({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.actionButton} onPress={onPress}>
-      <Text style={styles.actionText}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function formatValue(value: number | null | undefined, digits: number) {
-  if (value === null || value === undefined) return '—';
-  return value.toFixed(digits);
+function riskSummaryText(level: RiskLevel) {
+  if (level === 'Low') return 'Risk is stable today. Keep your routine.';
+  if (level === 'Moderate') return 'Risk is elevated vs baseline. Follow today\'s nudge.';
+  if (level === 'Needs Attention') return 'Risk is high today. Keep interventions low-burden and consistent.';
+  return 'Risk unavailable yet. Add more vitals to improve scoring.';
 }
 
 const styles = StyleSheet.create({
@@ -392,136 +178,39 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  summaryLabel: {
+  smallLabel: {
     fontSize: 12,
     color: theme.colors.textMuted,
+    marginBottom: 6,
   },
-  summaryValue: {
-    fontSize: 18,
+  blockTop: {
+    marginTop: 10,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  label: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+  },
+  value: {
+    fontSize: 16,
     fontWeight: '700',
     color: theme.colors.text,
   },
-  summaryDetail: {
+  detail: {
     fontSize: 14,
     color: theme.colors.text,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  link: {
-    fontSize: 12,
-    color: theme.colors.primaryDark,
-    fontWeight: '600',
-  },
-  momentum: {
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  momentumTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.text,
-    marginBottom: 6,
-  },
-  momentumDetail: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
     marginBottom: 4,
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  summaryChip: {
-    flexGrow: 1,
-    minWidth: '45%',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.input,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: theme.colors.surface,
-  },
-  summaryChipLabel: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-  },
-  summaryChipValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.text,
-    marginTop: 4,
-  },
-  chart: {
-    height: 160,
-    marginBottom: 12,
-  },
-  chartLabel: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    marginBottom: 6,
-  },
-  changesLabel: {
-    marginTop: 10,
-  },
-  chartPlaceholder: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.radius.input,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chartPlaceholderText: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-  pulseRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  pulseLabel: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-  pulseValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.text,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  actionButton: {
-    backgroundColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  actionText: {
-    color: theme.colors.primaryDark,
-    fontWeight: '600',
-    fontSize: 12,
   },
   driverRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 4,
   },
   driverChip: {
     backgroundColor: theme.colors.surfaceAlt,
@@ -531,12 +220,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  driverChipText: {
-    color: theme.colors.text,
+  driverText: {
     fontSize: 12,
+    color: theme.colors.text,
     fontWeight: '600',
   },
-  loadingText: {
+  actionsRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  actionButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  actionButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  secondaryButton: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  secondaryButtonText: {
+    color: theme.colors.text,
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  loading: {
     marginTop: 12,
     fontSize: 12,
     color: theme.colors.textMuted,

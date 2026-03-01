@@ -139,6 +139,15 @@ Fallback:
 - `POST /api/jobs/daily-score` at `5 3 * * *` (03:05 UTC)
 - `POST /api/jobs/dispatch-push` every 5 minutes
 
+## MVP Scope
+
+Mobile UI is intentionally trimmed to a focused MVP:
+- Home: today risk, explainability (drivers + what changed), today nudge, weekly report share.
+- Add Data: manual vitals/labs entry and device import.
+- Settings: notifications, clinician share, account actions.
+
+Advanced backend endpoints remain available but hidden from mobile navigation as internal/experimental (for later phases).
+
 ## Tests
 
 Web/API tests:

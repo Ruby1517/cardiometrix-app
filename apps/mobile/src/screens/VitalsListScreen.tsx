@@ -8,9 +8,6 @@ import { EducationCard } from '../components/EducationCard';
 import { fetchVitals } from '../api/vitals';
 import { fetchLabs } from '../api/labs';
 import { fetchGoals } from '../api/goals';
-import { fetchAnomalies, Anomaly } from '../api/anomalies';
-import { fetchDataQuality, DataQuality } from '../api/quality';
-import { fetchCohortComparison, CohortComparison } from '../api/cohort';
 import { Goal, LabEntry, VitalEntry } from '../api/types';
 import { getQueueSummary, syncPendingQueue } from '../store/offlineQueue';
 import { theme } from '../theme';
@@ -23,9 +20,6 @@ export function VitalsListScreen() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'vitals' | 'labs'>('vitals');
   const [showGoals, setShowGoals] = useState(false);
-  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
-  const [quality, setQuality] = useState<DataQuality | null>(null);
-  const [cohort, setCohort] = useState<CohortComparison | null>(null);
   const navigation = useNavigation();
   const [pending, setPending] = useState({ pending: 0, failed: 0 });
 
@@ -37,17 +31,11 @@ export function VitalsListScreen() {
         fetchLabs(),
         getQueueSummary('vitals'),
         fetchGoals(),
-        fetchAnomalies(),
-        fetchDataQuality(),
-        fetchCohortComparison(),
       ]);
       const vitalsRes = results[0];
       const labsRes = results[1];
       const queueRes = results[2];
       const goalsRes = results[3];
-      const anomaliesRes = results[4];
-      const qualityRes = results[5];
-      const cohortRes = results[6];
       if (vitalsRes.status === 'fulfilled') {
         setEntries(vitalsRes.value);
         setGoal((prev) => ({
@@ -66,15 +54,6 @@ export function VitalsListScreen() {
           ...(prev ?? {}),
           targets: goalsRes.value,
         }));
-      }
-      if (anomaliesRes.status === 'fulfilled') {
-        setAnomalies(anomaliesRes.value);
-      }
-      if (qualityRes.status === 'fulfilled') {
-        setQuality(qualityRes.value);
-      }
-      if (cohortRes.status === 'fulfilled') {
-        setCohort(cohortRes.value);
       }
     } catch {
       setEntries([]);
@@ -106,7 +85,7 @@ export function VitalsListScreen() {
     <Screen>
       <FlatList
         data={activeTab === 'vitals' ? entries : labs}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         style={styles.list}
         contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
@@ -145,7 +124,7 @@ export function VitalsListScreen() {
                 />
                 <SummaryItem
                   label="LDL"
-                  value={summary.latestLdl?.ldl ?? '—'}
+                  value={formatNumber(summary.latestLdl?.ldl)}
                   suffix="mg/dL"
                 />
               </View>
@@ -188,70 +167,6 @@ export function VitalsListScreen() {
                 </>
               ) : (
                 <Text style={styles.goalHint}>Tap to view targets and weekly change.</Text>
-              )}
-            </SectionCard>
-
-            <SectionCard>
-              <Text style={styles.sectionTitle}>Alerts</Text>
-              {anomalies.length === 0 ? (
-                <Text style={styles.emptySubtitle}>No spikes detected.</Text>
-              ) : (
-                anomalies.map((anomaly) => (
-                  <View key={`${anomaly.type}-${anomaly.date}-${anomaly.title}`} style={styles.alertItem}>
-                    <View style={styles.alertHeader}>
-                      <Text style={styles.alertTitle}>{anomaly.title}</Text>
-                      <Text style={styles.alertDate}>{anomaly.date}</Text>
-                    </View>
-                    <Text style={styles.alertDetail}>{anomaly.detail}</Text>
-                  </View>
-                ))
-              )}
-            </SectionCard>
-
-            <SectionCard>
-              <Text style={styles.sectionTitle}>Data Quality</Text>
-              {!quality ? (
-                <Text style={styles.emptySubtitle}>Not enough data yet.</Text>
-              ) : (
-                <>
-                  <View style={styles.qualityRow}>
-                    <Text style={styles.qualityScore}>{quality.score}</Text>
-                    <Text style={styles.qualitySummary}>{quality.summary}</Text>
-                  </View>
-                  <View style={styles.qualityBreakdown}>
-                    <Text style={styles.qualityItem}>
-                      Vitals {quality.days.vitals}/{quality.windowDays}
-                    </Text>
-                    <Text style={styles.qualityItem}>
-                      Symptoms {quality.days.symptoms}/{quality.windowDays}
-                    </Text>
-                    <Text style={styles.qualityItem}>
-                      Meds {quality.days.meds}/{quality.windowDays}
-                    </Text>
-                  </View>
-                </>
-              )}
-            </SectionCard>
-
-            <SectionCard>
-              <Text style={styles.sectionTitle}>Cohort Comparison</Text>
-              {!cohort ? (
-                <Text style={styles.emptySubtitle}>Complete your profile to see benchmarks.</Text>
-              ) : (
-                <>
-                  <Text style={styles.alertDetail}>{cohort.summary}</Text>
-                  <View style={styles.qualityBreakdown}>
-                    <Text style={styles.qualityItem}>Cohort {cohort.cohortLabel}</Text>
-                    <Text style={styles.qualityItem}>
-                      BP {cohort.benchmarks.systolic}/{cohort.benchmarks.diastolic}
-                    </Text>
-                    <Text style={styles.qualityItem}>
-                      BMI {cohort.benchmarks.bmiMin}-{cohort.benchmarks.bmiMax}
-                    </Text>
-                    <Text style={styles.qualityItem}>Your BMI {cohort.user.bmi ?? '—'}</Text>
-                  </View>
-                  <Text style={styles.cohortNote}>{cohort.note}</Text>
-                </>
               )}
             </SectionCard>
 
@@ -565,66 +480,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: 8,
   },
-  alertItem: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.input,
-    padding: 10,
-    marginBottom: 8,
-  },
-  alertHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  alertTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.text,
-  },
-  alertDate: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-  },
-  alertDetail: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    marginTop: 4,
-  },
-  qualityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  qualityScore: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  qualitySummary: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    flex: 1,
-  },
-  qualityBreakdown: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  qualityItem: {
-    fontSize: 12,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.radius.input,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  cohortNote: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-    marginTop: 8,
-  },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -815,11 +670,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: theme.colors.text,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    marginTop: 8,
   },
   pending: {
     backgroundColor: theme.colors.surfaceAlt,
