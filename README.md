@@ -25,25 +25,25 @@ Cardiometrix is organized as a mobile-first digital health product:
 
 ## Auth Mode (MVP)
 
-Single auth mode: **JWT bearer tokens**.
+<!-- Single auth mode: **JWT bearer tokens**.
 
 - Login/register returns JWT.
 - Mobile stores token in SecureStore/Keychain and sends `Authorization: Bearer <token>`.
 - Web portal stores token client-side and sends `Authorization: Bearer <token>` for `/api/*`.
-- API auth checks bearer token only (no cookie session dependency in MVP).
+- API auth checks bearer token only (no cookie session dependency in MVP). -->
 
 ## Quick Start
 
 ### Option A: Docker compose (recommended)
 
-```bash
+<!-- ```bash
 docker compose up --build
 ```
 
 Endpoints:
 - Web: `http://localhost:3000`
 - Risk service: `http://localhost:8001`
-- Mongo: `mongodb://localhost:27017`
+- Mongo: `mongodb://localhost:27017` -->
 
 ### Option B: Run services manually
 
@@ -67,7 +67,7 @@ pnpm dev:mobile
 pnpm dev:risk
 ```
 
-## Environment Variables
+<!-- ## Environment Variables
 
 Primary app env is expected in `apps/web/.env` (start from `apps/web/.env.example`).
 
@@ -89,7 +89,7 @@ Primary app env is expected in `apps/web/.env` (start from `apps/web/.env.exampl
 | `BP_TREND_DAYS` | No | `14` | Trend window |
 | `VAR_DAYS` | No | `7` | Variability window |
 | `BASELINE_DAYS` | No | `30` | Baseline window |
-| `RECENT_DAYS` | No | `7` | Recent comparison window |
+| `RECENT_DAYS` | No | `7` | Recent comparison window | -->
 
 ## Architecture
 
@@ -102,7 +102,7 @@ apps/mobile (patient) ---> apps/web API routes (/api/*) ---> MongoDB
 
 ## Daily Risk Orchestration
 
-1. Compute deterministic `FeaturesV1` from recent data.
+<!-- 1. Compute deterministic `FeaturesV1` from recent data.
 2. Call `POST {RISK_SERVICE_URL}/score`.
 3. Persist `RiskDaily` (+ compatibility mirror to legacy `RiskScore`).
 4. Pick and persist `DailyNudge` (+ compatibility mirror to legacy `Nudge`).
@@ -110,7 +110,7 @@ apps/mobile (patient) ---> apps/web API routes (/api/*) ---> MongoDB
 6. Mark `lastNotifiedDate` to avoid duplicate sends on the same local day.
 
 Fallback:
-- If data is insufficient or risk service is unavailable: store `band: "unknown"`, `risk: null`, and keep API response non-500.
+- If data is insufficient or risk service is unavailable: store `band: "unknown"`, `risk: null`, and keep API response non-500. -->
 
 ## Key API Endpoints
 
