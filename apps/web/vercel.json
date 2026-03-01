@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/jobs/daily-score",
+      "schedule": "5 3 * * *"
+    },
+    {
+      "path": "/api/jobs/dispatch-push",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

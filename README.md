@@ -1,59 +1,157 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cardiometrix Monorepo
 
-## Getting Started
+Cardiometrix is organized as a mobile-first digital health product:
+- `apps/mobile` is the main patient experience.
+- `apps/web` is the clinician/admin portal.
+- scoring and backend services live under `services/`.
 
-First, run the development server:
+## Repository Layout
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```text
+/apps
+  /mobile        # React Native / Expo (MAIN patient product)
+  /web           # Next.js clinician/admin portal + API routes
+/services
+  /api           # API service boundary (current API lives in apps/web/src/app/api)
+  /risk-service  # Python FastAPI risk scoring
+/packages
+  /shared        # shared zod schemas/types/utils
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Product Direction
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Mobile-first (patient):** data capture, device integrations, reminders, nudges, daily workflow.
+- **Web-first (clinician/admin):** triage dashboards, trend review, collaboration, reporting.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Auth Mode (MVP)
 
-## Learn More
+Single auth mode: **JWT bearer tokens**.
 
-To learn more about Next.js, take a look at the following resources:
+- Login/register returns JWT.
+- Mobile stores token in SecureStore/Keychain and sends `Authorization: Bearer <token>`.
+- Web portal stores token client-side and sends `Authorization: Bearer <token>` for `/api/*`.
+- API auth checks bearer token only (no cookie session dependency in MVP).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Quick Start
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Option A: Docker compose (recommended)
 
-## Deploy on Vercel
+```bash
+docker compose up --build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Endpoints:
+- Web: `http://localhost:3000`
+- Risk service: `http://localhost:8001`
+- Mongo: `mongodb://localhost:27017`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Option B: Run services manually
 
-## How Daily Risk Scoring Works
+1. Install workspace deps:
+```bash
+pnpm install
+```
 
-Cardiometrix computes daily risk through a Node orchestrator that calls the Python `risk-service`.
+2. Start web portal/API:
+```bash
+pnpm dev:web
+```
 
-1. At scoring time, the backend aggregates the user's last 30 days of vitals/labs into a deterministic `FeaturesV1` vector.
-2. The backend calls `POST {RISK_SERVICE_URL}/score`.
-3. Response is stored in `RiskDaily` (and mirrored into legacy `RiskScore` for compatibility).
-4. A daily nudge is selected from a catalog using top drivers + risk band and stored in `DailyNudge` (and mirrored into legacy `Nudge`).
-5. A daily scheduler runs this flow for all patient users at `DAILY_RISK_CRON` (default `0 3 * * *`).
+3. Start mobile app:
+```bash
+pnpm dev:mobile
+```
 
-If data is insufficient or risk-service is unavailable, the system stores a fallback risk record with:
-- `band: "unknown"`
-- `risk: null`
-- `error: "insufficient_data"` or `error: "risk_service_unavailable"`
+4. Start risk-service:
+```bash
+pnpm dev:risk
+```
 
-API endpoints:
+## Environment Variables
+
+Primary app env is expected in `apps/web/.env` (start from `apps/web/.env.example`).
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `MONGODB_URI` | Yes | - | Mongo connection string |
+| `MONGODB_DB` | Yes | `cardiometrix` | Database name |
+| `JWT_SECRET` | Yes | - | JWT signing secret |
+| `TOKEN_TTL_DAYS` | No | `7` | Auth token TTL |
+| `APP_URL` | No | `http://localhost:3000` | Public app URL |
+| `APP_BASE_URL` | No | `http://localhost:3000` | Base URL used by schedulers |
+| `RISK_SERVICE_URL` | Yes | `http://localhost:8001` | FastAPI risk service base URL |
+| `CRON_SECRET` | Yes (prod) | - | Protects `/api/jobs/*` cron endpoints |
+| `ADMIN_KEY` | No | - | Optional key for admin manual run endpoint |
+| `EXPO_ACCESS_TOKEN` | No | - | Optional Expo access token for server push |
+| `ENABLE_IN_PROCESS_CRON` | No | `false` | Set `true` only for persistent worker/server deployments |
+| `TZ` | No | `UTC` | Server timezone |
+| `COOKIE_DOMAIN` | No | unset | Cookie domain in production |
+| `BP_TREND_DAYS` | No | `14` | Trend window |
+| `VAR_DAYS` | No | `7` | Variability window |
+| `BASELINE_DAYS` | No | `30` | Baseline window |
+| `RECENT_DAYS` | No | `7` | Recent comparison window |
+
+## Architecture
+
+```text
+apps/mobile (patient) ---> apps/web API routes (/api/*) ---> MongoDB
+                                 |
+                                 v
+                         services/risk-service (/score)
+```
+
+## Daily Risk Orchestration
+
+1. Compute deterministic `FeaturesV1` from recent data.
+2. Call `POST {RISK_SERVICE_URL}/score`.
+3. Persist `RiskDaily` (+ compatibility mirror to legacy `RiskScore`).
+4. Pick and persist `DailyNudge` (+ compatibility mirror to legacy `Nudge`).
+5. Dispatch push notifications from server based on per-user `timezone + notifyTimeLocal`.
+6. Mark `lastNotifiedDate` to avoid duplicate sends on the same local day.
+
+Fallback:
+- If data is insufficient or risk service is unavailable: store `band: "unknown"`, `risk: null`, and keep API response non-500.
+
+## Key API Endpoints
+
+- `POST /api/push/register`
+- `PUT /api/settings/notifications`
 - `GET /api/risk/today`
 - `GET /api/risk/weekly`
 - `GET /api/risk/forecast?horizons=30,60,90`
+- `POST /api/risk/compute`
 - `POST /api/nudges/compute`
 - `GET /api/nudges/today`
-- `POST /api/admin/run-daily-risk` (admin only, optional `{ "date": "YYYY-MM-DD" }`)
+- `POST /api/nudges/done`
+- `POST /api/admin/run-daily?date=YYYY-MM-DD` (admin role or `ADMIN_KEY`)
+- `POST /api/jobs/daily-score` (cron secret protected)
+- `POST /api/jobs/dispatch-push` (cron secret protected)
+
+## Cron Security
+
+`/api/jobs/*` endpoints require one of:
+- `Authorization: Bearer $CRON_SECRET`
+- `x-cron-secret: $CRON_SECRET`
+
+## Vercel Cron
+
+`apps/web/vercel.json` includes:
+- `POST /api/jobs/daily-score` at `5 3 * * *` (03:05 UTC)
+- `POST /api/jobs/dispatch-push` every 5 minutes
+
+## Tests
+
+Web/API tests:
+```bash
+pnpm test
+```
+
+Risk-service tests:
+```bash
+cd services/risk-service
+pytest -q
+```
+
+## Package Manager
+
+Use `pnpm` at repo root for workspace consistency.
