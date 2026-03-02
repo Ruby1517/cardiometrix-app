@@ -5,7 +5,7 @@ Cardiometrix is organized as a mobile-first digital health product:
 - `apps/web` is the clinician/admin portal.
 - scoring and backend services live under `services/`.
 
-## Repository Layout
+<!-- ## Repository Layout
 
 ```text
 /apps
@@ -16,7 +16,7 @@ Cardiometrix is organized as a mobile-first digital health product:
   /risk-service  # Python FastAPI risk scoring
 /packages
   /shared        # shared zod schemas/types/utils
-```
+``` -->
 
 ## Product Direction
 
